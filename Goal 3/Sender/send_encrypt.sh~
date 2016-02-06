@@ -1,0 +1,57 @@
+#!/bin/bash
+
+#generate session key
+gcc sessionKey.c
+./a.out > sessionKey.txt
+echo "Enter your email address:"
+read senderEmail
+
+echo "Enter the receiver's address:"
+read receiverEmail
+
+#download the receiver's certificate from the class webpage
+python database.py $receiverEmail > certName.txt 
+read filename < certName.txt
+
+
+#extract receiver's public key from the certificate obtained from CA
+openssl x509 -in "$filename" -pubkey -noout > receiverPublicKey.pem
+
+#encypt the session key with receiver's public key
+openssl rsautl -encrypt -inkey receiverPublicKey.pem -pubin -in sessionKey.txt > encSessionKey.txt
+#openssl rsautl -decrypt -inkey LKPrivate.pem -in encSessionKey.txt -out SKD.txt
+
+
+echo "Enter message"
+read message
+echo "$message" > plainText.txt
+read sessionKey < sessionKey.txt
+echo $'\n'> blank.txt
+
+#encrypt the message using the session key
+openssl enc -aes-256-cbc -a -in plainText.txt > encMessage.txt -pass pass:"$sessionKey"
+#openssl enc -d -aes-256-cbc -a -in messageEnc.txt -out messageDec.txt -pass pass:"$sessionKey" 
+
+
+cat encSessionKey.txt blank.txt encMessage.txt > toSign.txt
+
+#signature of above content
+openssl dgst -sha1 -sign LKPrivate.pem > sign.txt toSign.txt
+
+#openssl dgst -sha1 -verify publicKey.pem -signature sign.txt toSign.txt
+
+echo "from:$senderEmail,to:$receiverEmail" > header.txt
+echo '-----BEGIN CSC474 MESSAGE-----' >> header.txt
+echo '-----END CSC474 MESSAGE-----' > trailer.txt
+echo "" > blank.txt
+cat header.txt toSign.txt blank.txt sign.txt blank.txt trailer.txt > finalSend.txt
+
+rm blank.txt
+rm certName.txt
+rm header.txt
+rm trailer.txt
+rm toSign.txt
+rm plainText.txt
+rm encMessage.txt
+rm encSessionKey.txt
+rm sign.txt
